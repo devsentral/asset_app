@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { 
+    Form,
     Card, 
+    Space,
     Tag, 
     Row,
     Col,
     Button,
     Table,
     Popconfirm,
+    Modal,
     message } from 'antd'
 import Breadcrumb from "@/common/Breadcrumb";
+import { Uploader } from '@/common/Uploader'
 import { SearchColumn, FilterColumn, FilterYearColumn } from "@/common/SearchColumn";
 import { api } from '@/api'
 import { roleAccess } from '@/helpers/menu'
@@ -17,6 +21,7 @@ import HeaderLayout from '@/layouts/Header';
 
 const Asset = () => {
     const { stockTakingId } = useParams()
+    const [form] = Form.useForm()
     const [loading, setLoading] = useState(false)
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
@@ -26,6 +31,11 @@ const Asset = () => {
     const [stockTaking, setStockTaking] = useState([])
     const [paginationPage, setPaginationPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
+
+    const [modalTitle, setModalTitle] = useState(null);
+    const [uploading, setUploading] = useState(false)
+    const [showUpload, setShowUpload] = useState(false);
+    const [attachmentFile, setAttachmentFile] = useState(null);
 
     const fetchStockTaking = () => {
         api("GET", `stock-taking/${stockTakingId}`).then((res) => {
@@ -353,6 +363,48 @@ const Asset = () => {
             SearchColumn('book_value', handleSearch),
         ),
     ];
+    
+    const importXls = () => {
+        setModalTitle('Upload from Excel')
+        setShowUpload(!showUpload)
+
+        setAttachmentFile(null)
+    }
+
+    const saveImportXls = (v) => {
+        let payload = {
+            filename: attachmentFile,
+        }
+
+        if (!attachmentFile) {
+            message.open({
+                type: 'error',
+                content: 'Please upload xlsx or csv file',
+            });
+        } else {
+            api("POST", `initial-asset/import-xls/${stockTakingId}`, payload).then((res) => {
+                message.open({
+                    type: 'success',
+                    content: 'Successfully saved data',
+                });
+                setShowUpload(!showUpload)
+                fetchData()
+            }).catch((err) => {
+                message.open({
+                    type: 'error',
+                    content: 'Failed to saving data',
+                });
+                setShowUpload(!showUpload)
+            })
+        }
+        
+    }
+
+    const fileUploaded = (v) => {
+        if (v.meta.success) {
+            setAttachmentFile(v.data.url)
+        }
+    }
 
     return (
         <div>
@@ -383,6 +435,14 @@ const Asset = () => {
                                         </Popconfirm>
                                     : null }
                                     
+                                    {roleAccess('initial assets add') ?
+                                        <Button className='button-primary' size="middle" onClick={importXls}
+                                        type="primary" loading={saving}
+                                        style={{ marginRight: 10 }}>
+                                            Upload from Excel
+                                        </Button>
+                                    : null }
+
                                     <Button style={{ marginRight: 10 }}
                                         onClick={downloadExcel}
                                         loading={downloading}
@@ -419,6 +479,33 @@ const Asset = () => {
                     </Card>
                 </Col>
             </Row>
+
+            <Modal title={modalTitle} open={showUpload} 
+                footer={null}
+                onCancel={() => setShowUpload(!showUpload)}>
+                    <Form onFinish={(e) => saveImportXls(e)}
+                        form={form} layout='vertical'>
+                        <Form.Item>
+                            <Uploader multiple={false} dragger accept=".xlsx,.xls"
+                                directory="import-excel"
+                                onUploaded={(v, key) => fileUploaded(v)} 
+                                isUploading={(v) => setUploading(v)}
+                            />
+                        </Form.Item>
+                        <Space>
+                            <Form.Item>
+                                <Button className="button-primary" type="primary" htmlType='submit'>
+                                    Submit
+                                </Button>
+                            </Form.Item>
+                            <Form.Item>
+                                <Button onClick={() => setShowUpload(!showUpload)} danger type="primary">
+                                    Close
+                                </Button>
+                            </Form.Item>
+                        </Space>
+                    </Form>
+            </Modal>
         </div>
     )
 }
